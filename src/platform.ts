@@ -111,7 +111,7 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
         const colorRgb = getDeviceLedRgbColor(device);
         existingAccessory.context.device = device;
         existingAccessory.context.server = deviceServer;
-        existingAccessory.context.whiteBalance = this.getDeviceWhiteBalance(deviceServer, device.name, device.location);
+        existingAccessory.context.ledWhiteBalances = this.getDeviceLedWhiteBalances(deviceServer, device);
         if (!isLedOff(colorRgb)) {
           existingAccessory.context.lastPoweredRgbColor = colorRgb;
         }
@@ -133,7 +133,7 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
         const colorRgb = getDeviceLedRgbColor(device);
         accessory.context.device = device;
         accessory.context.server = deviceServer;
-        accessory.context.whiteBalance = this.getDeviceWhiteBalance(deviceServer, device.name, device.location);
+        accessory.context.ledWhiteBalances = this.getDeviceLedWhiteBalances(deviceServer, device);
         if (!isLedOff(colorRgb)) {
           accessory.context.lastPoweredRgbColor = colorRgb;
         }
@@ -184,17 +184,24 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
     return this.api.hap.uuid.generate(`${device.name}-${device.serial}-${device.location}`);
   }
 
-  /** Looks up the white balance multipliers for a device from the server's deviceConfigs.
-   *  whiteBalance is a single value 0-255: 0=cool (reduce red), 128=neutral, 255=warm (reduce blue).
-   */
-  getDeviceWhiteBalance(server: RgbServer, deviceName: string, deviceLocation?: string): Color {
-    const deviceConfig = server.deviceConfigs?.find((dc) =>
-      dc.name === deviceName && (dc.location === undefined || dc.location === deviceLocation),
-    );
-    const wb = deviceConfig?.whiteBalance ?? 128;
+  /** Converts a single white balance value (0=cool, 128=neutral, 255=warm) to an RGB multiplier Color. */
+  wbToColor(wb: number): Color {
     const r = wb <= 128 ? Math.round(127 + wb) : 255;
     const b = wb >= 128 ? Math.round(383 - wb) : 255;
     return [r, 255, b];
+  }
+
+  /** Returns a per-LED white balance Color array for a device. Falls back to device-level WB for unconfigured LEDs. */
+  getDeviceLedWhiteBalances(server: RgbServer, device: RgbDevice): Color[] {
+    const deviceConfig = server.deviceConfigs?.find((dc) =>
+      dc.name === device.name && (dc.location === undefined || dc.location === device.location),
+    );
+    const deviceDefault = this.wbToColor(deviceConfig?.whiteBalance ?? 128);
+    const ledCount = device.colors?.length ?? 1;
+    return Array.from({ length: ledCount }, (_, i) => {
+      const ledWb = deviceConfig?.ledWhiteBalance?.[i];
+      return ledWb !== undefined ? this.wbToColor(ledWb) : deviceDefault;
+    });
   }
 
   /**

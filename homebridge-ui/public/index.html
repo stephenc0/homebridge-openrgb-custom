@@ -76,6 +76,32 @@
     color: var(--text-muted-colour, #6c757d);
     margin-top: 3px;
   }
+  .per-led-toggle {
+    font-size: 12px;
+    color: var(--primary-colour, #007bff);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 4px 0 0;
+    display: block;
+    text-align: center;
+    width: 100%;
+  }
+  .led-grid {
+    margin-top: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border-colour, #dee2e6);
+    padding-top: 8px;
+  }
+  .led-row {
+    display: grid;
+    grid-template-columns: 40px 1fr 36px;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+  }
+  .led-label { font-size: 11px; color: var(--text-muted-colour, #6c757d); }
   .btn {
     padding: 5px 12px;
     border: none;
@@ -160,6 +186,20 @@
   }
 
   /* ---- device list ---- */
+  function makeWbSlider(value, onChange) {
+    const valLabel = el('div', { className: 'wb-value' }, wbLabel(value));
+    const slider = el('input', { type: 'range', min: 0, max: 255, step: 1, value });
+    slider.oninput = () => { onChange(parseInt(slider.value)); valLabel.textContent = wbLabel(parseInt(slider.value)); };
+    return el('div', {},
+      el('div', { className: 'wb-row' },
+        el('span', { className: 'wb-label cool' }, '❄ Cool'),
+        slider,
+        el('span', { className: 'wb-label warm' }, 'Warm ☀')
+      ),
+      valLabel
+    );
+  }
+
   function renderDevices(server, container) {
     container.innerHTML = '';
     if (!server.deviceConfigs || !server.deviceConfigs.length) {
@@ -167,19 +207,45 @@
       return;
     }
     server.deviceConfigs.forEach((dc, di) => {
-      const wb = dc.whiteBalance ?? 128;
-      const valLabel = el('div', { className: 'wb-value' }, wbLabel(wb));
-      const slider = el('input', { type: 'range', min: 0, max: 255, step: 1, value: wb });
-      slider.oninput = () => {
-        dc.whiteBalance = parseInt(slider.value);
-        valLabel.textContent = wbLabel(parseInt(slider.value));
-      };
+      if (!dc.ledWhiteBalance) dc.ledWhiteBalance = [];
 
       const nameEl = el('div', { className: 'device-name' }, dc.name);
       const headerLeft = el('div', {}, nameEl);
-      if (dc.location) {
-        headerLeft.appendChild(el('div', { className: 'device-location' }, dc.location));
+      if (dc.location) headerLeft.appendChild(el('div', { className: 'device-location' }, dc.location));
+
+      // Device-level slider
+      const deviceSlider = makeWbSlider(dc.whiteBalance ?? 128, v => dc.whiteBalance = v);
+
+      // Per-LED section (hidden by default)
+      const ledCount = dc.ledCount ?? dc.ledWhiteBalance.length;
+      const ledGrid = el('div', { className: 'led-grid', style: 'display:none' });
+
+      function renderLedGrid() {
+        ledGrid.innerHTML = '';
+        if (!ledCount) {
+          ledGrid.appendChild(el('div', { style: 'font-size:12px;color:var(--text-muted-colour,#6c757d)' }, 'Re-discover to get LED count.'));
+          return;
+        }
+        for (let i = 0; i < ledCount; i++) {
+          const ledWb = dc.ledWhiteBalance[i] ?? 128;
+          const ledLabel = el('span', { className: 'led-label' }, `LED ${i + 1}`);
+          const ledValLabel = el('span', { className: 'slider-value', style: 'font-size:11px;text-align:right' }, wbLabel(ledWb));
+          const ledSlider = el('input', { type: 'range', min: 0, max: 255, step: 1, value: ledWb });
+          ledSlider.oninput = () => {
+            dc.ledWhiteBalance[i] = parseInt(ledSlider.value);
+            ledValLabel.textContent = wbLabel(parseInt(ledSlider.value));
+          };
+          ledGrid.appendChild(el('div', { className: 'led-row' }, ledLabel, ledSlider, ledValLabel));
+        }
       }
+      renderLedGrid();
+
+      let ledOpen = false;
+      const toggleBtn = el('button', { className: 'per-led-toggle', onclick: () => {
+        ledOpen = !ledOpen;
+        ledGrid.style.display = ledOpen ? 'block' : 'none';
+        toggleBtn.textContent = ledOpen ? '▲ Hide per-LED overrides' : `▼ Per-LED overrides (${ledCount} LEDs)`;
+      }}, `▼ Per-LED overrides (${ledCount} LEDs)`);
 
       const card = el('div', { className: 'device-card' },
         el('div', { className: 'device-header' },
@@ -189,12 +255,9 @@
             renderDevices(server, container);
           }}, '✕')
         ),
-        el('div', { className: 'wb-row' },
-          el('span', { className: 'wb-label cool' }, '❄ Cool'),
-          slider,
-          el('span', { className: 'wb-label warm' }, 'Warm ☀')
-        ),
-        valLabel
+        deviceSlider,
+        toggleBtn,
+        ledGrid
       );
       container.appendChild(card);
     });
@@ -223,7 +286,7 @@
             dc.name === d.name && (dc.location === undefined || dc.location === d.location)
           );
           if (!alreadyExists) {
-            const entry = { name: d.name, whiteBalance: 128 };
+            const entry = { name: d.name, whiteBalance: 128, ledCount: d.ledCount, ledWhiteBalance: [] };
             if (nameCounts[d.name] > 1) entry.location = d.location;
             server.deviceConfigs.push(entry);
             added++;

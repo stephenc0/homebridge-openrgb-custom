@@ -1,4 +1,5 @@
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import type { AdaptiveLightingController } from 'homebridge';
 
 import { OpenRgbPlatform } from './platform';
 
@@ -8,7 +9,6 @@ import {
   getDeviceLedRgbColor,
   findDeviceModeId,
   isLedOff,
-  createDeviceLedConfig,
   getStateHsvColor,
   applyWhiteBalance,
   colorTemperatureToRgb,
@@ -22,6 +22,7 @@ import { CHARACTERISTIC_UPDATE_DELAY, DEFAULT_DEVICE_NAME } from './settings';
  */
 export class OpenRgbPlatformAccessory {
   private service: Service;
+  private adaptiveLightingController: AdaptiveLightingController;
 
   private states: RgbDeviceStates = {
     On: false,
@@ -76,6 +77,9 @@ export class OpenRgbPlatformAccessory {
       .onSet(this.setColorTemperature.bind(this))
       .onGet(this.getColorTemperature.bind(this));
 
+    // enable Adaptive Lighting (automatic color temperature scheduling by Apple Home)
+    this.adaptiveLightingController = new this.platform.api.hap.AdaptiveLightingController(this.service);
+    this.accessory.configureController(this.adaptiveLightingController);
   }
 
   async getOn(): Promise<CharacteristicValue> {
@@ -211,7 +215,7 @@ export class OpenRgbPlatformAccessory {
     await new Promise(resolve => setTimeout(() => resolve(0), CHARACTERISTIC_UPDATE_DELAY));
 
     const isOn: boolean = this.states.On;
-    const whiteBalance: Color = this.accessory.context.whiteBalance ?? [255, 255, 255];
+    const ledWhiteBalances: Color[] = this.accessory.context.ledWhiteBalances ?? [];
 
     // Determine target color from current state
     let newColorRgb: Color;
@@ -263,10 +267,13 @@ export class OpenRgbPlatformAccessory {
         newMode = directModeId;
       }
 
-      // Apply white balance (skip when turning off)
-      const finalColorRgb: Color = isLedOff(newColorRgb)
-        ? newColorRgb
-        : applyWhiteBalance(newColorRgb, whiteBalance);
+      // Build per-LED colors, applying each LED's individual white balance
+      const neutral: Color = [255, 255, 255];
+      const newLedColors: OpenRgbColor[] = device.colors.map((_, i) => {
+        const wb = ledWhiteBalances[i] ?? neutral;
+        const finalColor: Color = isLedOff(newColorRgb) ? newColorRgb : applyWhiteBalance(newColorRgb, wb);
+        return { red: finalColor[0], green: finalColor[1], blue: finalColor[2] };
+      });
 
       try {
         if (newMode !== undefined) {
@@ -275,7 +282,6 @@ export class OpenRgbPlatformAccessory {
             this.accessory.context.lastPoweredModeId = newMode;
           }
         }
-        const newLedColors: OpenRgbColor[] = createDeviceLedConfig(finalColorRgb, device);
         await client.updateLeds(device.deviceId, newLedColors);
         if (!isLedOff(newColorRgb)) {
           this.accessory.context.lastPoweredRgbColor = newColorRgb;

@@ -35,7 +35,7 @@ export interface RgbServer {
     name: string;
     host: string;
     port: number;
-    deviceConfigs?: { name: string; location?: string; whiteBalance?: number }[];
+    deviceConfigs?: { name: string; location?: string; whiteBalance?: number; ledWhiteBalance?: number[] }[];
 }
 
 /** State information that HomeKit keeps for accessories */
@@ -51,7 +51,8 @@ export interface RgbDeviceStates {
 export interface RgbDeviceContext {
     device: RgbDevice;
     server: RgbServer;
-    whiteBalance: Color;  // [r, g, b] channel multipliers 0-255; 255 = no change
+    /** Per-LED white balance as RGB multiplier colors; index matches LED index. All LEDs present. */
+    ledWhiteBalances: Color[];
     lastPoweredRgbColor?: Color;
     lastPoweredModeId?: number;
 }
