@@ -1,0 +1,112 @@
+{
+  "pluginAlias": "OpenRgbCustomPlatform",
+  "pluginType": "platform",
+  "singular": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "required": true,
+        "default": "OpenRGB",
+        "description": "A name to label this plugin"
+      },
+      "servers": {
+        "title": "Computers Running the OpenRGB SDK Server",
+        "type": "array",
+        "items": {
+          "title": "Server",
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": true,
+              "default": "My Computer",
+              "description": "A name for this server"
+            },
+            "host": {
+              "title": "Host",
+              "type": "string",
+              "required": true,
+              "default": "localhost",
+              "description": "The IP address (e.g. 10.0.0.2) or hostname (e.g. my-computer.local) that the OpenRGB SDK Server is running on"
+            },
+            "port": {
+              "title": "Port",
+              "type": "integer",
+              "required": true,
+              "default": 6742,
+              "description": "The port number that the OpenRGB SDK Server is set to run on"
+            },
+            "deviceConfigs": {
+              "title": "Device White Balance",
+              "type": "array",
+              "items": {
+                "title": "Device",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "title": "Device Name",
+                    "type": "string",
+                    "required": true,
+                    "description": "Exact device name as reported by OpenRGB"
+                  },
+                  "whiteBalanceR": {
+                    "title": "Red (0–255)",
+                    "type": "integer",
+                    "required": false,
+                    "default": 255,
+                    "minimum": 0,
+                    "maximum": 255,
+                    "description": "Red channel multiplier. 255 = no change, lower values reduce red output."
+                  },
+                  "whiteBalanceG": {
+                    "title": "Green (0–255)",
+                    "type": "integer",
+                    "required": false,
+                    "default": 255,
+                    "minimum": 0,
+                    "maximum": 255,
+                    "description": "Green channel multiplier. 255 = no change, lower values reduce green output."
+                  },
+                  "whiteBalanceB": {
+                    "title": "Blue (0–255)",
+                    "type": "integer",
+                    "required": false,
+                    "default": 255,
+                    "minimum": 0,
+                    "maximum": 255,
+                    "description": "Blue channel multiplier. 255 = no change, lower values reduce blue output."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "discoveryInterval": {
+        "title": "Discovery Interval",
+        "type": "integer",
+        "required": true,
+        "default": 60,
+        "description": "How often (in seconds) to check if new devices are available to connect to"
+      },
+      "preserveDisconnected": {
+        "title": "Preserve Disconnected Devices",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "description": "Enable this to have the plugin keep devices that are disconnected from their server. By default, devices that are not connected when their server is queried are removed from HomeKit, which may mess up your scenes if you have devices such as peripherals which are not always connected to your PC"
+      },
+      "suppressConnectionErrors": {
+        "title": "Suppress Connection Errors",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "description": "Enable this to hide log messages about errors connecting to your PC"
+      }
+    }
+  }
+}
