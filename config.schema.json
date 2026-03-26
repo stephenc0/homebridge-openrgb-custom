@@ -54,31 +54,25 @@
                     "description": "Exact device name as reported by OpenRGB"
                   },
                   "whiteBalanceR": {
-                    "title": "Red (0–255)",
+                    "title": "Red",
                     "type": "integer",
-                    "required": false,
                     "default": 255,
                     "minimum": 0,
-                    "maximum": 255,
-                    "description": "Red channel multiplier. 255 = no change, lower values reduce red output."
+                    "maximum": 255
                   },
                   "whiteBalanceG": {
-                    "title": "Green (0–255)",
+                    "title": "Green",
                     "type": "integer",
-                    "required": false,
                     "default": 255,
                     "minimum": 0,
-                    "maximum": 255,
-                    "description": "Green channel multiplier. 255 = no change, lower values reduce green output."
+                    "maximum": 255
                   },
                   "whiteBalanceB": {
-                    "title": "Blue (0–255)",
+                    "title": "Blue",
                     "type": "integer",
-                    "required": false,
                     "default": 255,
                     "minimum": 0,
-                    "maximum": 255,
-                    "description": "Blue channel multiplier. 255 = no change, lower values reduce blue output."
+                    "maximum": 255
                   }
                 }
               }
@@ -91,22 +85,70 @@
         "type": "integer",
         "required": true,
         "default": 60,
-        "description": "How often (in seconds) to check if new devices are available to connect to"
+        "description": "How often (in seconds) to check if new devices are available"
       },
       "preserveDisconnected": {
         "title": "Preserve Disconnected Devices",
         "type": "boolean",
-        "required": false,
         "default": false,
-        "description": "Enable this to have the plugin keep devices that are disconnected from their server. By default, devices that are not connected when their server is queried are removed from HomeKit, which may mess up your scenes if you have devices such as peripherals which are not always connected to your PC"
+        "description": "Keep devices in HomeKit even when disconnected from their server"
       },
       "suppressConnectionErrors": {
         "title": "Suppress Connection Errors",
         "type": "boolean",
-        "required": false,
         "default": false,
-        "description": "Enable this to hide log messages about errors connecting to your PC"
+        "description": "Hide log messages about errors connecting to your PC"
       }
     }
-  }
+  },
+  "form": [
+    "name",
+    {
+      "key": "servers",
+      "type": "array",
+      "title": "Servers",
+      "buttonText": "Add Server",
+      "items": [
+        "servers[].name",
+        "servers[].host",
+        "servers[].port",
+        {
+          "key": "servers[].deviceConfigs",
+          "type": "array",
+          "title": "Device White Balance",
+          "buttonText": "Add Device",
+          "items": [
+            "servers[].deviceConfigs[].name",
+            {
+              "key": "servers[].deviceConfigs[].whiteBalanceR",
+              "type": "range",
+              "minimum": 0,
+              "maximum": 255,
+              "step": 1,
+              "description": "Red channel — 255 = no change"
+            },
+            {
+              "key": "servers[].deviceConfigs[].whiteBalanceG",
+              "type": "range",
+              "minimum": 0,
+              "maximum": 255,
+              "step": 1,
+              "description": "Green channel — 255 = no change"
+            },
+            {
+              "key": "servers[].deviceConfigs[].whiteBalanceB",
+              "type": "range",
+              "minimum": 0,
+              "maximum": 255,
+              "step": 1,
+              "description": "Blue channel — 255 = no change"
+            }
+          ]
+        }
+      ]
+    },
+    "discoveryInterval",
+    "preserveDisconnected",
+    "suppressConnectionErrors"
+  ]
 }
