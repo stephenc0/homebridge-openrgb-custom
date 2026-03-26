@@ -3,13 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <style>
+  html, body {
+    background: transparent;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 14px;
     padding: 16px;
     color: var(--text-colour, #212529);
-    background: transparent;
   }
   .field { margin-bottom: 12px; }
   label { display: block; font-weight: 500; margin-bottom: 4px; font-size: 13px; }
@@ -29,7 +31,6 @@
     padding: 8px 0;
     border-bottom: 1px solid var(--border-colour, #dee2e6);
   }
-  .toggle-row:last-of-type { border-bottom: none; }
   .server-card {
     border: 1px solid var(--border-colour, #dee2e6);
     border-radius: 6px;
@@ -45,31 +46,36 @@
   .server-title { font-weight: 600; font-size: 15px; }
   .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .device-card {
-    background: var(--secondary-background-colour, #f8f9fa);
+    border: 1px solid var(--border-colour, #dee2e6);
     border-radius: 4px;
     padding: 10px 12px;
     margin-bottom: 8px;
+    background: var(--modal-background-colour, transparent);
   }
   .device-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
   .device-name { font-weight: 500; font-size: 13px; }
-  .slider-row {
+  .device-location { font-size: 11px; color: var(--text-muted-colour, #6c757d); margin-top: 1px; }
+  .wb-row {
     display: grid;
-    grid-template-columns: 16px 1fr 32px;
+    grid-template-columns: 36px 1fr 36px;
     align-items: center;
     gap: 8px;
-    margin-bottom: 5px;
   }
-  .ch { font-size: 11px; font-weight: 700; }
-  .ch.r { color: #e05; }
-  .ch.g { color: #0a0; }
-  .ch.b { color: #07f; }
+  .wb-label { font-size: 11px; color: var(--text-muted-colour, #6c757d); }
+  .wb-label.cool { color: #6aa3f5; }
+  .wb-label.warm { color: #f5a623; text-align: right; }
   input[type=range] { width: 100%; cursor: pointer; accent-color: var(--primary-colour, #007bff); }
-  .slider-value { text-align: right; font-size: 12px; color: var(--text-muted-colour, #6c757d); }
+  .wb-value {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted-colour, #6c757d);
+    margin-top: 3px;
+  }
   .btn {
     padding: 5px 12px;
     border: none;
@@ -104,7 +110,6 @@
   .save-status { font-size: 12px; }
   .save-status.ok { color: #28a745; }
   .save-status.err { color: #dc3545; }
-  hr { border: none; border-top: 1px solid var(--border-colour, #dee2e6); margin: 12px 0; }
 </style>
 </head>
 <body>
@@ -148,6 +153,12 @@
     return el('div', { className: 'toggle-row' }, el('span', {}, labelText), cb);
   }
 
+  function wbLabel(value) {
+    if (value < 100) return 'Cool';
+    if (value > 156) return 'Warm';
+    return 'Neutral';
+  }
+
   /* ---- device list ---- */
   function renderDevices(server, container) {
     container.innerHTML = '';
@@ -156,25 +167,35 @@
       return;
     }
     server.deviceConfigs.forEach((dc, di) => {
-      const card = el('div', { className: 'device-card' });
-      card.appendChild(el('div', { className: 'device-header' },
-        el('span', { className: 'device-name' }, dc.name),
-        el('button', { className: 'btn btn-danger', onclick: () => {
-          server.deviceConfigs.splice(di, 1);
-          renderDevices(server, container);
-        }}, '✕')
-      ));
-      for (const [ch, key] of [['R', 'whiteBalanceR'], ['G', 'whiteBalanceG'], ['B', 'whiteBalanceB']]) {
-        const val = dc[key] ?? 255;
-        const valLabel = el('span', { className: 'slider-value' }, String(val));
-        const slider = el('input', { type: 'range', min: 0, max: 255, step: 1, value: val });
-        slider.oninput = () => { dc[key] = parseInt(slider.value); valLabel.textContent = slider.value; };
-        card.appendChild(el('div', { className: 'slider-row' },
-          el('span', { className: `ch ${ch.toLowerCase()}` }, ch),
-          slider,
-          valLabel
-        ));
+      const wb = dc.whiteBalance ?? 128;
+      const valLabel = el('div', { className: 'wb-value' }, wbLabel(wb));
+      const slider = el('input', { type: 'range', min: 0, max: 255, step: 1, value: wb });
+      slider.oninput = () => {
+        dc.whiteBalance = parseInt(slider.value);
+        valLabel.textContent = wbLabel(parseInt(slider.value));
+      };
+
+      const nameEl = el('div', { className: 'device-name' }, dc.name);
+      const headerLeft = el('div', {}, nameEl);
+      if (dc.location) {
+        headerLeft.appendChild(el('div', { className: 'device-location' }, dc.location));
       }
+
+      const card = el('div', { className: 'device-card' },
+        el('div', { className: 'device-header' },
+          headerLeft,
+          el('button', { className: 'btn btn-danger', onclick: () => {
+            server.deviceConfigs.splice(di, 1);
+            renderDevices(server, container);
+          }}, '✕')
+        ),
+        el('div', { className: 'wb-row' },
+          el('span', { className: 'wb-label cool' }, '❄ Cool'),
+          slider,
+          el('span', { className: 'wb-label warm' }, 'Warm ☀')
+        ),
+        valLabel
+      );
       container.appendChild(card);
     });
   }
@@ -191,10 +212,20 @@
       discoverStatus.textContent = 'Connecting…';
       try {
         const result = await homebridge.request('/discover', { host: server.host, port: server.port, name: server.name });
+
+        // Count names to detect duplicates
+        const nameCounts = {};
+        for (const d of result.devices) nameCounts[d.name] = (nameCounts[d.name] || 0) + 1;
+
         let added = 0;
         for (const d of result.devices) {
-          if (!server.deviceConfigs.find(dc => dc.name === d.name)) {
-            server.deviceConfigs.push({ name: d.name, whiteBalanceR: 255, whiteBalanceG: 255, whiteBalanceB: 255 });
+          const alreadyExists = server.deviceConfigs.find(dc =>
+            dc.name === d.name && (dc.location === undefined || dc.location === d.location)
+          );
+          if (!alreadyExists) {
+            const entry = { name: d.name, whiteBalance: 128 };
+            if (nameCounts[d.name] > 1) entry.location = d.location;
+            server.deviceConfigs.push(entry);
             added++;
           }
         }
@@ -208,10 +239,8 @@
 
     const hostInput = el('input', { type: 'text', value: server.host ?? '' });
     hostInput.oninput = () => server.host = hostInput.value;
-
     const nameInput = el('input', { type: 'text', value: server.name ?? '' });
     nameInput.oninput = () => { server.name = nameInput.value; titleEl.textContent = nameInput.value; };
-
     const portInput = el('input', { type: 'number', value: server.port ?? 6742 });
     portInput.oninput = () => server.port = parseInt(portInput.value);
 
@@ -251,7 +280,6 @@
   /* ---- render ---- */
   function render() {
     app.innerHTML = '';
-
     app.appendChild(field('Plugin Name', cfg.name, 'text', v => cfg.name = v));
     app.appendChild(field('Discovery Interval (seconds)', cfg.discoveryInterval, 'number', v => cfg.discoveryInterval = parseInt(v)));
     app.appendChild(toggle('Preserve Disconnected Devices', cfg.preserveDisconnected, v => cfg.preserveDisconnected = v));

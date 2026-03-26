@@ -111,7 +111,7 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
         const colorRgb = getDeviceLedRgbColor(device);
         existingAccessory.context.device = device;
         existingAccessory.context.server = deviceServer;
-        existingAccessory.context.whiteBalance = this.getDeviceWhiteBalance(deviceServer, device.name);
+        existingAccessory.context.whiteBalance = this.getDeviceWhiteBalance(deviceServer, device.name, device.location);
         if (!isLedOff(colorRgb)) {
           existingAccessory.context.lastPoweredRgbColor = colorRgb;
         }
@@ -133,7 +133,7 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
         const colorRgb = getDeviceLedRgbColor(device);
         accessory.context.device = device;
         accessory.context.server = deviceServer;
-        accessory.context.whiteBalance = this.getDeviceWhiteBalance(deviceServer, device.name);
+        accessory.context.whiteBalance = this.getDeviceWhiteBalance(deviceServer, device.name, device.location);
         if (!isLedOff(colorRgb)) {
           accessory.context.lastPoweredRgbColor = colorRgb;
         }
@@ -184,14 +184,17 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
     return this.api.hap.uuid.generate(`${device.name}-${device.serial}-${device.location}`);
   }
 
-  /** Looks up the white balance multipliers for a device from the server's deviceConfigs */
-  getDeviceWhiteBalance(server: RgbServer, deviceName: string): Color {
-    const deviceConfig = server.deviceConfigs?.find((dc: any) => dc.name === deviceName);
-    return [
-      deviceConfig?.whiteBalanceR ?? 255,
-      deviceConfig?.whiteBalanceG ?? 255,
-      deviceConfig?.whiteBalanceB ?? 255,
-    ];
+  /** Looks up the white balance multipliers for a device from the server's deviceConfigs.
+   *  whiteBalance is a single value 0-255: 0=cool (reduce red), 128=neutral, 255=warm (reduce blue).
+   */
+  getDeviceWhiteBalance(server: RgbServer, deviceName: string, deviceLocation?: string): Color {
+    const deviceConfig = server.deviceConfigs?.find((dc) =>
+      dc.name === deviceName && (dc.location === undefined || dc.location === deviceLocation),
+    );
+    const wb = deviceConfig?.whiteBalance ?? 128;
+    const r = wb <= 128 ? Math.round(127 + wb) : 255;
+    const b = wb >= 128 ? Math.round(383 - wb) : 255;
+    return [r, 255, b];
   }
 
   /**

@@ -35,7 +35,7 @@ export interface RgbServer {
     name: string;
     host: string;
     port: number;
-    deviceConfigs?: { name: string; whiteBalanceR?: number; whiteBalanceG?: number; whiteBalanceB?: number }[];
+    deviceConfigs?: { name: string; location?: string; whiteBalance?: number }[];
 }
 
 /** State information that HomeKit keeps for accessories */

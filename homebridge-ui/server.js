@@ -21,7 +21,7 @@ class OpenRgbUiServer extends HomebridgePluginUiServer {
     for (let i = 0; i < count; i++) {
       try {
         const device = await client.getControllerData(i);
-        devices.push({ name: device.name });
+        devices.push({ name: device.name, location: device.location });
       } catch (_) {}
     }
 
