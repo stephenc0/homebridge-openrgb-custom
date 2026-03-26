@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    padding: 16px;
+    color: var(--text-colour, #212529);
+    background: transparent;
+  }
+  .field { margin-bottom: 12px; }
+  label { display: block; font-weight: 500; margin-bottom: 4px; font-size: 13px; }
+  input[type=text], input[type=number] {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border-colour, #ced4da);
+    border-radius: 4px;
+    background: var(--input-background-colour, #fff);
+    color: var(--text-colour, #212529);
+    font-size: 14px;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-colour, #dee2e6);
+  }
+  .toggle-row:last-of-type { border-bottom: none; }
+  .server-card {
+    border: 1px solid var(--border-colour, #dee2e6);
+    border-radius: 6px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .server-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .server-title { font-weight: 600; font-size: 15px; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .device-card {
+    background: var(--secondary-background-colour, #f8f9fa);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .device-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .device-name { font-weight: 500; font-size: 13px; }
+  .slider-row {
+    display: grid;
+    grid-template-columns: 16px 1fr 32px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+  .ch { font-size: 11px; font-weight: 700; }
+  .ch.r { color: #e05; }
+  .ch.g { color: #0a0; }
+  .ch.b { color: #07f; }
+  input[type=range] { width: 100%; cursor: pointer; accent-color: var(--primary-colour, #007bff); }
+  .slider-value { text-align: right; font-size: 12px; color: var(--text-muted-colour, #6c757d); }
+  .btn {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .btn-primary { background: var(--primary-colour, #007bff); color: #fff; }
+  .btn-danger { background: #dc3545; color: #fff; padding: 2px 8px; font-size: 12px; }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--primary-colour, #007bff);
+    color: var(--primary-colour, #007bff);
+  }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+  .section-title { font-weight: 600; margin: 16px 0 8px; font-size: 14px; }
+  .discover-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 8px; }
+  .discover-status { font-size: 12px; color: var(--text-muted-colour, #6c757d); }
+  .no-devices { font-size: 13px; color: var(--text-muted-colour, #6c757d); padding: 4px 0 8px; }
+  .save-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--background-colour, #fff);
+    padding: 12px 0 4px;
+    border-top: 1px solid var(--border-colour, #dee2e6);
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .save-status { font-size: 12px; }
+  .save-status.ok { color: #28a745; }
+  .save-status.err { color: #dc3545; }
+  hr { border: none; border-top: 1px solid var(--border-colour, #dee2e6); margin: 12px 0; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(async () => {
+  const configs = await homebridge.getPluginConfig();
+  const cfg = Object.assign(
+    { name: 'OpenRGB Custom', servers: [], discoveryInterval: 60, preserveDisconnected: false, suppressConnectionErrors: false },
+    configs[0] || {}
+  );
+  if (!cfg.servers) cfg.servers = [];
+
+  const app = document.getElementById('app');
+
+  /* ---- helpers ---- */
+  function el(tag, props, ...children) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (k === 'style' && typeof v === 'string') e.style.cssText = v;
+      else if (k.startsWith('on')) e[k] = v;
+      else if (k in e) e[k] = v;
+      else e.setAttribute(k, v);
+    }
+    for (const c of children) {
+      if (c == null) continue;
+      e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+  }
+
+  function field(labelText, value, type, onChange) {
+    const input = el('input', { type, value: value ?? '' });
+    input.oninput = () => onChange(input.value);
+    return el('div', { className: 'field' }, el('label', {}, labelText), input);
+  }
+
+  function toggle(labelText, checked, onChange) {
+    const cb = el('input', { type: 'checkbox', checked: !!checked, style: 'width:auto' });
+    cb.onchange = () => onChange(cb.checked);
+    return el('div', { className: 'toggle-row' }, el('span', {}, labelText), cb);
+  }
+
+  /* ---- device list ---- */
+  function renderDevices(server, container) {
+    container.innerHTML = '';
+    if (!server.deviceConfigs || !server.deviceConfigs.length) {
+      container.appendChild(el('div', { className: 'no-devices' }, 'No devices — click Discover to load from server.'));
+      return;
+    }
+    server.deviceConfigs.forEach((dc, di) => {
+      const card = el('div', { className: 'device-card' });
+      card.appendChild(el('div', { className: 'device-header' },
+        el('span', { className: 'device-name' }, dc.name),
+        el('button', { className: 'btn btn-danger', onclick: () => {
+          server.deviceConfigs.splice(di, 1);
+          renderDevices(server, container);
+        }}, '✕')
+      ));
+      for (const [ch, key] of [['R', 'whiteBalanceR'], ['G', 'whiteBalanceG'], ['B', 'whiteBalanceB']]) {
+        const val = dc[key] ?? 255;
+        const valLabel = el('span', { className: 'slider-value' }, String(val));
+        const slider = el('input', { type: 'range', min: 0, max: 255, step: 1, value: val });
+        slider.oninput = () => { dc[key] = parseInt(slider.value); valLabel.textContent = slider.value; };
+        card.appendChild(el('div', { className: 'slider-row' },
+          el('span', { className: `ch ${ch.toLowerCase()}` }, ch),
+          slider,
+          valLabel
+        ));
+      }
+      container.appendChild(card);
+    });
+  }
+
+  /* ---- server card ---- */
+  function renderServer(server, si) {
+    if (!server.deviceConfigs) server.deviceConfigs = [];
+    const titleEl = el('span', { className: 'server-title' }, server.name || 'Server');
+    const devicesDiv = el('div');
+
+    const discoverStatus = el('span', { className: 'discover-status' });
+    const discoverBtn = el('button', { className: 'btn btn-outline', onclick: async () => {
+      discoverBtn.disabled = true;
+      discoverStatus.textContent = 'Connecting…';
+      try {
+        const result = await homebridge.request('/discover', { host: server.host, port: server.port, name: server.name });
+        let added = 0;
+        for (const d of result.devices) {
+          if (!server.deviceConfigs.find(dc => dc.name === d.name)) {
+            server.deviceConfigs.push({ name: d.name, whiteBalanceR: 255, whiteBalanceG: 255, whiteBalanceB: 255 });
+            added++;
+          }
+        }
+        discoverStatus.textContent = `${result.devices.length} device(s) found${added ? `, ${added} new` : ', none new'}.`;
+        renderDevices(server, devicesDiv);
+      } catch (e) {
+        discoverStatus.textContent = `Failed: ${e.message}`;
+      }
+      discoverBtn.disabled = false;
+    }}, 'Discover Devices');
+
+    const hostInput = el('input', { type: 'text', value: server.host ?? '' });
+    hostInput.oninput = () => server.host = hostInput.value;
+
+    const nameInput = el('input', { type: 'text', value: server.name ?? '' });
+    nameInput.oninput = () => { server.name = nameInput.value; titleEl.textContent = nameInput.value; };
+
+    const portInput = el('input', { type: 'number', value: server.port ?? 6742 });
+    portInput.oninput = () => server.port = parseInt(portInput.value);
+
+    const card = el('div', { className: 'server-card' },
+      el('div', { className: 'server-header' },
+        titleEl,
+        el('button', { className: 'btn btn-danger', onclick: () => { cfg.servers.splice(si, 1); render(); }}, 'Remove')
+      ),
+      el('div', { className: 'row-2' },
+        el('div', { className: 'field' }, el('label', {}, 'Name'), nameInput),
+        el('div', { className: 'field' }, el('label', {}, 'Host'), hostInput)
+      ),
+      el('div', { className: 'field' }, el('label', {}, 'Port'), portInput),
+      el('div', { className: 'discover-row' }, discoverBtn, discoverStatus),
+      devicesDiv
+    );
+
+    renderDevices(server, devicesDiv);
+    app.appendChild(card);
+  }
+
+  /* ---- save ---- */
+  let saveStatusEl;
+  async function save() {
+    try {
+      await homebridge.updatePluginConfig([cfg]);
+      await homebridge.savePluginConfig();
+      saveStatusEl.className = 'save-status ok';
+      saveStatusEl.textContent = 'Saved!';
+    } catch (e) {
+      saveStatusEl.className = 'save-status err';
+      saveStatusEl.textContent = 'Error: ' + e.message;
+    }
+    setTimeout(() => { saveStatusEl.textContent = ''; }, 3000);
+  }
+
+  /* ---- render ---- */
+  function render() {
+    app.innerHTML = '';
+
+    app.appendChild(field('Plugin Name', cfg.name, 'text', v => cfg.name = v));
+    app.appendChild(field('Discovery Interval (seconds)', cfg.discoveryInterval, 'number', v => cfg.discoveryInterval = parseInt(v)));
+    app.appendChild(toggle('Preserve Disconnected Devices', cfg.preserveDisconnected, v => cfg.preserveDisconnected = v));
+    app.appendChild(toggle('Suppress Connection Errors', cfg.suppressConnectionErrors, v => cfg.suppressConnectionErrors = v));
+
+    app.appendChild(el('div', { className: 'section-title' }, 'Servers'));
+    cfg.servers.forEach((s, i) => renderServer(s, i));
+    app.appendChild(el('button', { className: 'btn btn-outline', onclick: () => {
+      cfg.servers.push({ name: 'My Computer', host: 'localhost', port: 6742, deviceConfigs: [] });
+      render();
+    }}, '+ Add Server'));
+
+    saveStatusEl = el('span', { className: 'save-status' });
+    app.appendChild(el('div', { className: 'save-bar' },
+      el('button', { className: 'btn btn-primary', onclick: save }, 'Save'),
+      saveStatusEl
+    ));
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

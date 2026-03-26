@@ -23,6 +23,7 @@
     "prepublishOnly": "npm run lint && npm run build"
   },
   "dependencies": {
+    "@homebridge/plugin-ui-utils": "^2.2.2",
     "color-convert": "^2.0.1",
     "openrgb-sdk": "^0.6.0"
   },
