@@ -153,6 +153,9 @@
 
   const app = document.getElementById('app');
 
+  // Tracks which zone panels are open across re-renders: key = "serverName|deviceName|location"
+  const openZonePanels = new Set();
+
   /* ---- auto-push config on changes ---- */
   let pushTimer;
   function pushConfig() {
@@ -322,15 +325,17 @@
       }
       renderZoneGrid();
 
-      let zoneOpen = false;
+      const panelKey = `${server.name}|${dc.name}|${dc.location ?? ''}`;
+      let zoneOpen = openZonePanels.has(panelKey);
+      if (zoneOpen) zoneGrid.style.display = 'block';
       const zoneLabel = zones.length ? `▼ Zone overrides (${zones.length} zones)` : '▼ Zone overrides (discover to load)';
+      const openLabel = zones.length ? '▲ Hide zone overrides' : '▲ Hide zone overrides';
       const toggleBtn = el('button', { className: 'zone-toggle', onclick: () => {
         zoneOpen = !zoneOpen;
+        if (zoneOpen) openZonePanels.add(panelKey); else openZonePanels.delete(panelKey);
         zoneGrid.style.display = zoneOpen ? 'block' : 'none';
-        toggleBtn.textContent = zoneOpen
-          ? (zones.length ? '▲ Hide zone overrides' : '▲ Hide zone overrides')
-          : zoneLabel;
-      }}, zoneLabel);
+        toggleBtn.textContent = zoneOpen ? openLabel : zoneLabel;
+      }}, zoneOpen ? openLabel : zoneLabel);
 
       const card = el('div', { className: 'device-card' },
         el('div', { className: 'device-header' },
@@ -368,13 +373,14 @@
         const nameCounts = {};
         for (const d of result.devices) nameCounts[d.name] = (nameCounts[d.name] || 0) + 1;
 
-        let added = 0;
+        let added = 0, refreshed = 0;
         for (const d of result.devices) {
           const alreadyExists = server.deviceConfigs.find(dc =>
             dc.name === d.name && (dc.location === undefined || dc.location === d.location)
           );
           if (alreadyExists) {
-            alreadyExists.zones = d.zones; // refresh zone info
+            alreadyExists.zones = d.zones; // refresh zone info (including LED counts)
+            refreshed++;
           } else {
             const entry = { name: d.name, whiteBalance: 128, zones: d.zones, zoneWhiteBalance: {} };
             if (nameCounts[d.name] > 1) entry.location = d.location;
@@ -382,7 +388,10 @@
             added++;
           }
         }
-        discoverStatus.textContent = `${result.devices.length} device(s) found${added ? `, ${added} new` : ', none new'}.`;
+        const parts = [`${result.devices.length} device(s) found`];
+        if (added) parts.push(`${added} new`);
+        if (refreshed) parts.push(`${refreshed} refreshed`);
+        discoverStatus.textContent = parts.join(', ') + '.';
         renderDevices(server, devicesDiv);
       } catch (e) {
         discoverStatus.textContent = `Failed: ${e.message}`;

@@ -220,7 +220,6 @@ export class OpenRgbPlatformAccessory {
     await new Promise(resolve => setTimeout(() => resolve(0), CHARACTERISTIC_UPDATE_DELAY));
 
     const isOn: boolean = this.states.On;
-    const ledWhiteBalances: Color[] = this.accessory.context.ledWhiteBalances ?? [];
     const { Brightness: bri, ColorTemperature: ct2 } = this.states;
     const device = this.accessory.context.device.name;
     this.platform.log.debug(`updateLeds: On=${isOn} Bri=${bri} CT=${ct2} colorTemp=${this.useColorTemp} (${device})`);
@@ -277,9 +276,11 @@ export class OpenRgbPlatformAccessory {
       }
 
       // Build per-LED colors, applying each LED's individual white balance
+      // Recompute from live device so zone LED count changes are picked up immediately
+      const liveLedWhiteBalances = this.platform.getDeviceLedWhiteBalances(this.accessory.context.server, device);
       const neutral: Color = [255, 255, 255];
       const newLedColors: OpenRgbColor[] = device.colors.map((_, i) => {
-        const wb = ledWhiteBalances[i] ?? neutral;
+        const wb = liveLedWhiteBalances[i] ?? neutral;
         const finalColor: Color = isLedOff(newColorRgb) ? newColorRgb : applyWhiteBalance(newColorRgb, wb);
         return { red: finalColor[0], green: finalColor[1], blue: finalColor[2] };
       });
