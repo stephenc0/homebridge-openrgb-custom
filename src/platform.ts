@@ -191,17 +191,30 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
     return [r, 255, b];
   }
 
-  /** Returns a per-LED white balance Color array for a device. Falls back to device-level WB for unconfigured LEDs. */
+  /** Returns a per-LED white balance Color array for a device.
+   *  Zone overrides are applied to their LED ranges; device-level WB is the fallback.
+   */
   getDeviceLedWhiteBalances(server: RgbServer, device: RgbDevice): Color[] {
     const deviceConfig = server.deviceConfigs?.find((dc) =>
       dc.name === device.name && (dc.location === undefined || dc.location === device.location),
     );
     const deviceDefault = this.wbToColor(deviceConfig?.whiteBalance ?? 128);
     const ledCount = device.colors?.length ?? 1;
-    return Array.from({ length: ledCount }, (_, i) => {
-      const ledWb = deviceConfig?.ledWhiteBalance?.[i];
-      return ledWb !== undefined ? this.wbToColor(ledWb) : deviceDefault;
-    });
+    const result: Color[] = new Array(ledCount).fill(deviceDefault);
+
+    if (deviceConfig?.zoneWhiteBalance && device.zones?.length) {
+      let ledIndex = 0;
+      for (const zone of device.zones) {
+        const zoneWb = deviceConfig.zoneWhiteBalance[zone.name];
+        const zoneColor = zoneWb !== undefined ? this.wbToColor(zoneWb) : deviceDefault;
+        for (let i = 0; i < zone.ledsCount && ledIndex + i < ledCount; i++) {
+          result[ledIndex + i] = zoneColor;
+        }
+        ledIndex += zone.ledsCount;
+      }
+    }
+
+    return result;
   }
 
   /**

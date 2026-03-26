@@ -76,7 +76,7 @@
     color: var(--text-muted-colour, #6c757d);
     margin-top: 3px;
   }
-  .per-led-toggle {
+  .zone-toggle {
     font-size: 12px;
     color: var(--primary-colour, #007bff);
     cursor: pointer;
@@ -87,21 +87,20 @@
     text-align: center;
     width: 100%;
   }
-  .led-grid {
+  .zone-grid {
     margin-top: 8px;
-    max-height: 200px;
-    overflow-y: auto;
     border-top: 1px solid var(--border-colour, #dee2e6);
     padding-top: 8px;
   }
-  .led-row {
-    display: grid;
-    grid-template-columns: 40px 1fr 36px;
-    align-items: center;
-    gap: 6px;
+  .zone-row { margin-bottom: 10px; }
+  .zone-label {
+    font-size: 12px;
+    font-weight: 500;
     margin-bottom: 3px;
+    display: flex;
+    justify-content: space-between;
   }
-  .led-label { font-size: 11px; color: var(--text-muted-colour, #6c757d); }
+  .zone-leds { font-size: 11px; color: var(--text-muted-colour, #6c757d); font-weight: normal; }
   .btn {
     padding: 5px 12px;
     border: none;
@@ -122,20 +121,16 @@
   .discover-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 8px; }
   .discover-status { font-size: 12px; color: var(--text-muted-colour, #6c757d); }
   .no-devices { font-size: 13px; color: var(--text-muted-colour, #6c757d); padding: 4px 0 8px; }
-  .save-bar {
-    position: sticky;
-    bottom: 0;
-    background: var(--background-colour, #fff);
-    padding: 12px 0 4px;
-    border-top: 1px solid var(--border-colour, #dee2e6);
-    margin-top: 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  .identify-btn {
+    font-size: 12px;
+    padding: 2px 8px;
+    background: transparent;
+    border: 1px solid var(--border-colour, #ced4da);
+    border-radius: 4px;
+    color: var(--text-colour, #212529);
+    cursor: pointer;
   }
-  .save-status { font-size: 12px; }
-  .save-status.ok { color: #28a745; }
-  .save-status.err { color: #dc3545; }
+  .identify-btn:disabled { opacity: 0.5; cursor: default; }
 </style>
 </head>
 <body>
@@ -150,6 +145,13 @@
   if (!cfg.servers) cfg.servers = [];
 
   const app = document.getElementById('app');
+
+  /* ---- auto-push config on changes ---- */
+  let pushTimer;
+  function pushConfig() {
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => homebridge.updatePluginConfig([cfg]), 500);
+  }
 
   /* ---- helpers ---- */
   function el(tag, props, ...children) {
@@ -169,13 +171,13 @@
 
   function field(labelText, value, type, onChange) {
     const input = el('input', { type, value: value ?? '' });
-    input.oninput = () => onChange(input.value);
+    input.oninput = () => { onChange(input.value); pushConfig(); };
     return el('div', { className: 'field' }, el('label', {}, labelText), input);
   }
 
   function toggle(labelText, checked, onChange) {
     const cb = el('input', { type: 'checkbox', checked: !!checked, style: 'width:auto' });
-    cb.onchange = () => onChange(cb.checked);
+    cb.onchange = () => { onChange(cb.checked); pushConfig(); };
     return el('div', { className: 'toggle-row' }, el('span', {}, labelText), cb);
   }
 
@@ -189,7 +191,7 @@
   function makeWbSlider(value, onChange) {
     const valLabel = el('div', { className: 'wb-value' }, wbLabel(value));
     const slider = el('input', { type: 'range', min: 0, max: 255, step: 1, value });
-    slider.oninput = () => { onChange(parseInt(slider.value)); valLabel.textContent = wbLabel(parseInt(slider.value)); };
+    slider.oninput = () => { onChange(parseInt(slider.value)); valLabel.textContent = wbLabel(parseInt(slider.value)); pushConfig(); };
     return el('div', {},
       el('div', { className: 'wb-row' },
         el('span', { className: 'wb-label cool' }, '❄ Cool'),
@@ -198,6 +200,25 @@
       ),
       valLabel
     );
+  }
+
+  function makeIdentifyBtn(server, dc) {
+    const btn = el('button', { className: 'identify-btn' }, '💡 Identify');
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        await homebridge.request('/identify', {
+          host: server.host, port: server.port, name: server.name,
+          deviceName: dc.name, location: dc.location,
+        });
+      } catch (e) {
+        homebridge.toast.error(e.message, 'Identify failed');
+      }
+      btn.disabled = false;
+      btn.textContent = '💡 Identify';
+    };
+    return btn;
   }
 
   function renderDevices(server, container) {
@@ -216,48 +237,66 @@
       // Device-level slider
       const deviceSlider = makeWbSlider(dc.whiteBalance ?? 128, v => dc.whiteBalance = v);
 
-      // Per-LED section (hidden by default)
-      const ledCount = dc.ledCount ?? dc.ledWhiteBalance.length;
-      const ledGrid = el('div', { className: 'led-grid', style: 'display:none' });
+      // Per-zone section (hidden by default)
+      const zones = dc.zones ?? [];
+      if (!dc.zoneWhiteBalance) dc.zoneWhiteBalance = {};
+      const zoneGrid = el('div', { className: 'zone-grid', style: 'display:none' });
 
-      function renderLedGrid() {
-        ledGrid.innerHTML = '';
-        if (!ledCount) {
-          ledGrid.appendChild(el('div', { style: 'font-size:12px;color:var(--text-muted-colour,#6c757d)' }, 'Re-discover to get LED count.'));
+      function renderZoneGrid() {
+        zoneGrid.innerHTML = '';
+        if (!zones.length) {
+          zoneGrid.appendChild(el('div', { style: 'font-size:12px;color:var(--text-muted-colour,#6c757d)' }, 'No zones — re-discover to load zone info.'));
           return;
         }
-        for (let i = 0; i < ledCount; i++) {
-          const ledWb = dc.ledWhiteBalance[i] ?? 128;
-          const ledLabel = el('span', { className: 'led-label' }, `LED ${i + 1}`);
-          const ledValLabel = el('span', { className: 'slider-value', style: 'font-size:11px;text-align:right' }, wbLabel(ledWb));
-          const ledSlider = el('input', { type: 'range', min: 0, max: 255, step: 1, value: ledWb });
-          ledSlider.oninput = () => {
-            dc.ledWhiteBalance[i] = parseInt(ledSlider.value);
-            ledValLabel.textContent = wbLabel(parseInt(ledSlider.value));
+        for (const zone of zones) {
+          const zoneWb = dc.zoneWhiteBalance[zone.name] ?? 128;
+          const valLabel = el('div', { className: 'wb-value' }, wbLabel(zoneWb));
+          const slider = el('input', { type: 'range', min: 0, max: 255, step: 1, value: zoneWb });
+          slider.oninput = () => {
+            dc.zoneWhiteBalance[zone.name] = parseInt(slider.value);
+            valLabel.textContent = wbLabel(parseInt(slider.value));
+            pushConfig();
           };
-          ledGrid.appendChild(el('div', { className: 'led-row' }, ledLabel, ledSlider, ledValLabel));
+          zoneGrid.appendChild(el('div', { className: 'zone-row' },
+            el('div', { className: 'zone-label' },
+              el('span', {}, zone.name),
+              el('span', { className: 'zone-leds' }, `${zone.ledCount} LEDs`)
+            ),
+            el('div', { className: 'wb-row' },
+              el('span', { className: 'wb-label cool' }, '❄'),
+              slider,
+              el('span', { className: 'wb-label warm' }, '☀')
+            ),
+            valLabel
+          ));
         }
       }
-      renderLedGrid();
+      renderZoneGrid();
 
-      let ledOpen = false;
-      const toggleBtn = el('button', { className: 'per-led-toggle', onclick: () => {
-        ledOpen = !ledOpen;
-        ledGrid.style.display = ledOpen ? 'block' : 'none';
-        toggleBtn.textContent = ledOpen ? '▲ Hide per-LED overrides' : `▼ Per-LED overrides (${ledCount} LEDs)`;
-      }}, `▼ Per-LED overrides (${ledCount} LEDs)`);
+      let zoneOpen = false;
+      const zoneLabel = zones.length ? `▼ Zone overrides (${zones.length} zones)` : '▼ Zone overrides (discover to load)';
+      const toggleBtn = el('button', { className: 'zone-toggle', onclick: () => {
+        zoneOpen = !zoneOpen;
+        zoneGrid.style.display = zoneOpen ? 'block' : 'none';
+        toggleBtn.textContent = zoneOpen
+          ? (zones.length ? '▲ Hide zone overrides' : '▲ Hide zone overrides')
+          : zoneLabel;
+      }}, zoneLabel);
 
       const card = el('div', { className: 'device-card' },
         el('div', { className: 'device-header' },
           headerLeft,
-          el('button', { className: 'btn btn-danger', onclick: () => {
-            server.deviceConfigs.splice(di, 1);
-            renderDevices(server, container);
-          }}, '✕')
+          el('div', { style: 'display:flex;gap:6px;align-items:center' },
+            makeIdentifyBtn(server, dc),
+            el('button', { className: 'btn btn-danger', onclick: () => {
+              server.deviceConfigs.splice(di, 1);
+              renderDevices(server, container);
+            }}, '✕')
+          )
         ),
         deviceSlider,
         toggleBtn,
-        ledGrid
+        zoneGrid
       );
       container.appendChild(card);
     });
@@ -285,8 +324,10 @@
           const alreadyExists = server.deviceConfigs.find(dc =>
             dc.name === d.name && (dc.location === undefined || dc.location === d.location)
           );
-          if (!alreadyExists) {
-            const entry = { name: d.name, whiteBalance: 128, ledCount: d.ledCount, ledWhiteBalance: [] };
+          if (alreadyExists) {
+            alreadyExists.zones = d.zones; // refresh zone info
+          } else {
+            const entry = { name: d.name, whiteBalance: 128, zones: d.zones, zoneWhiteBalance: {} };
             if (nameCounts[d.name] > 1) entry.location = d.location;
             server.deviceConfigs.push(entry);
             added++;
@@ -325,21 +366,6 @@
     app.appendChild(card);
   }
 
-  /* ---- save ---- */
-  let saveStatusEl;
-  async function save() {
-    try {
-      await homebridge.updatePluginConfig([cfg]);
-      await homebridge.savePluginConfig();
-      saveStatusEl.className = 'save-status ok';
-      saveStatusEl.textContent = 'Saved!';
-    } catch (e) {
-      saveStatusEl.className = 'save-status err';
-      saveStatusEl.textContent = 'Error: ' + e.message;
-    }
-    setTimeout(() => { saveStatusEl.textContent = ''; }, 3000);
-  }
-
   /* ---- render ---- */
   function render() {
     app.innerHTML = '';
@@ -352,14 +378,9 @@
     cfg.servers.forEach((s, i) => renderServer(s, i));
     app.appendChild(el('button', { className: 'btn btn-outline', onclick: () => {
       cfg.servers.push({ name: 'My Computer', host: 'localhost', port: 6742, deviceConfigs: [] });
+      pushConfig();
       render();
     }}, '+ Add Server'));
-
-    saveStatusEl = el('span', { className: 'save-status' });
-    app.appendChild(el('div', { className: 'save-bar' },
-      el('button', { className: 'btn btn-primary', onclick: save }, 'Save'),
-      saveStatusEl
-    ));
   }
 
   render();
