@@ -318,7 +318,7 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
         const device: RgbDevice = await client.getControllerData(deviceId);
         devices.push(device);
       } catch (err) {
-        this.log.warn(`Unable to get status of RGB device ${deviceId} on OpenRGB SDK server` +
+        this.log.debug(`Unable to get status of RGB device ${deviceId} on OpenRGB SDK server` +
           ` at ${serverHost}:${serverPort}: ${(err as Error).message}`);
       }
     }
