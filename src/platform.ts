@@ -5,7 +5,7 @@ import { OpenRgbPlatformAccessory } from './platformAccessory';
 
 import { RgbServer, RgbDevice, RgbDeviceContext } from './rgb';
 import { Client as OpenRGB } from 'openrgb-sdk';
-import { getDeviceLedRgbColor, findDeviceModeId, isLedOff } from './utils';
+import { findDeviceModeId } from './utils';
 import { Color } from './rgb';
 
 /**
@@ -108,15 +108,11 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
       if (existingAccessory) {
         this.log.debug('Restoring existing accessory from cache:', existingAccessory.displayName);
 
-        const colorRgb = getDeviceLedRgbColor(device);
         existingAccessory.context.device = device;
         existingAccessory.context.server = deviceServer;
         existingAccessory.context.ledWhiteBalances = this.getDeviceLedWhiteBalances(deviceServer, device);
         existingAccessory.context.ledTints = this.getDeviceLedTints(deviceServer, device);
         existingAccessory.context.ledSaturations = this.getDeviceLedSaturations(deviceServer, device);
-        if (!isLedOff(colorRgb)) {
-          existingAccessory.context.lastPoweredRgbColor = colorRgb;
-        }
         if (device.activeMode !== findDeviceModeId(device, 'Off')) {
           existingAccessory.context.lastPoweredModeId = device.activeMode;
         }
@@ -132,15 +128,11 @@ export class OpenRgbPlatform implements DynamicPlatformPlugin {
         const accessory = new this.api.platformAccessory<RgbDeviceContext>(device.name || DEFAULT_DEVICE_NAME, uuid);
         this.accessories.push(accessory);
 
-        const colorRgb = getDeviceLedRgbColor(device);
         accessory.context.device = device;
         accessory.context.server = deviceServer;
         accessory.context.ledWhiteBalances = this.getDeviceLedWhiteBalances(deviceServer, device);
         accessory.context.ledTints = this.getDeviceLedTints(deviceServer, device);
         accessory.context.ledSaturations = this.getDeviceLedSaturations(deviceServer, device);
-        if (!isLedOff(colorRgb)) {
-          accessory.context.lastPoweredRgbColor = colorRgb;
-        }
         if (device.activeMode !== findDeviceModeId(device, 'Off')) {
           accessory.context.lastPoweredModeId = device.activeMode;
         }

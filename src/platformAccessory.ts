@@ -39,6 +39,13 @@ export class OpenRgbPlatformAccessory {
     private readonly platform: OpenRgbPlatform,
     private readonly accessory: PlatformAccessory<RgbDeviceContext>,
   ) {
+    // Restore persisted characteristic state so GET handlers don't need a device connection
+    if (accessory.context.states) {
+      this.states = { ...accessory.context.states };
+    }
+    if (accessory.context.useColorTemp !== undefined) {
+      this.useColorTemp = accessory.context.useColorTemp;
+    }
 
     // set accessory information
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
@@ -82,6 +89,12 @@ export class OpenRgbPlatformAccessory {
     this.accessory.configureController(this.adaptiveLightingController);
   }
 
+  /** Persists the current in-memory state to the accessory context so it survives restarts. */
+  private persistState() {
+    this.accessory.context.states = { ...this.states };
+    this.accessory.context.useColorTemp = this.useColorTemp;
+  }
+
   async getOn(): Promise<CharacteristicValue> {
     const isOn = await this.getLedsOn();
     this.states.On = isOn;
@@ -90,68 +103,23 @@ export class OpenRgbPlatformAccessory {
   }
 
   async getHue(): Promise<CharacteristicValue> {
-    const ledsHsv = await this.getLedsHsv();
-    const hue = ledsHsv[0];
-    this.states.Hue = hue;
-    this.platform.log.debug(`Get Characteristic Hue -> ${hue} (${this.accessory.context.device.name})`);
-    return hue;
+    this.platform.log.debug(`Get Characteristic Hue -> ${this.states.Hue} (${this.accessory.context.device.name})`);
+    return this.states.Hue;
   }
 
   async getSaturation(): Promise<CharacteristicValue> {
-    const ledsHsv = await this.getLedsHsv();
-    const saturation = ledsHsv[1];
-    this.states.Saturation = saturation;
-    this.platform.log.debug(`Get Characteristic Saturation -> ${saturation} (${this.accessory.context.device.name})`);
-    return saturation;
+    this.platform.log.debug(`Get Characteristic Saturation -> ${this.states.Saturation} (${this.accessory.context.device.name})`);
+    return this.states.Saturation;
   }
 
   async getBrightness(): Promise<CharacteristicValue> {
-    const ledsHsv = await this.getLedsHsv();
-    const brightness = ledsHsv[2];
-    this.states.Brightness = brightness;
-    this.platform.log.debug(`Get Characteristic Brightness -> ${brightness} (${this.accessory.context.device.name})`);
-    return brightness;
+    this.platform.log.debug(`Get Characteristic Brightness -> ${this.states.Brightness} (${this.accessory.context.device.name})`);
+    return this.states.Brightness;
   }
 
   async getColorTemperature(): Promise<CharacteristicValue> {
-    const ct = this.states.ColorTemperature;
-    this.platform.log.debug(`Get Characteristic ColorTemperature -> ${ct} (${this.accessory.context.device.name})`);
+    this.platform.log.debug(`Get Characteristic ColorTemperature -> ${this.states.ColorTemperature} (${this.accessory.context.device.name})`);
     return this.states.ColorTemperature;
-  }
-
-  /**
-   * Called to get the light color currently set on the device in HSV format.
-   * Since this can only return a single color, the function must get just the first LED's
-   * color and make the assumption that the others match it.
-   * If the computer/SDK server is off, the light will appear to be off, not unresponsive.
-   */
-  async getLedsHsv(): Promise<Color> {
-    let colorHsv: Color = [0, 0, 0];
-
-    await this.platform.rgbConnection(this.accessory.context.server, (client, devices) => {
-      const device = devices.find(d => this.platform.genUuid(d) === this.accessory.UUID);
-      if (!device) {
-        return;
-      }
-
-      const colorRgb = getDeviceLedRgbColor(device);
-
-      if (isLedOff(colorRgb)) {
-        // Lights off: return the previous state to preserve the set color
-        colorHsv = getStateHsvColor(this.states);
-      } else {
-        // Use the stored pre-override base color so transforms don't stack on restart.
-        // Fall back to reading from the device only if no stored value exists yet.
-        const baseColor = this.accessory.context.lastPoweredRgbColor ?? colorRgb;
-        colorHsv = ColorConvert.rgb.hsv(...baseColor);
-      }
-
-      if (device.activeMode !== findDeviceModeId(device, 'Off')) {
-        this.accessory.context.lastPoweredModeId = device.activeMode;
-      }
-    });
-
-    return colorHsv;
   }
 
   /** Called to get whether the light is on or not. */
@@ -179,6 +147,7 @@ export class OpenRgbPlatformAccessory {
   async setOn(value: CharacteristicValue) {
     const togglingPower = this.states.On !== value as boolean;
     this.states.On = value as boolean;
+    this.persistState();
     await this.updateLeds(togglingPower);
     this.platform.log.debug(`Set Characteristic On -> ${value} (${this.accessory.context.device.name})`);
   }
@@ -186,18 +155,21 @@ export class OpenRgbPlatformAccessory {
   async setHue(value: CharacteristicValue) {
     this.states.Hue = value as number;
     this.useColorTemp = false;
+    this.persistState();
     await this.updateLeds();
     this.platform.log.debug(`Set Characteristic Hue -> ${value} (${this.accessory.context.device.name})`);
   }
 
   async setSaturation(value: CharacteristicValue) {
     this.states.Saturation = value as number;
+    this.persistState();
     await this.updateLeds();
     this.platform.log.debug(`Set Characteristic Saturation -> ${value} (${this.accessory.context.device.name})`);
   }
 
   async setBrightness(value: CharacteristicValue) {
     this.states.Brightness = value as number;
+    this.persistState();
     await this.updateLeds();
     this.platform.log.debug(`Set Characteristic Brightness -> ${value} (${this.accessory.context.device.name})`);
   }
@@ -205,6 +177,7 @@ export class OpenRgbPlatformAccessory {
   async setColorTemperature(value: CharacteristicValue) {
     this.states.ColorTemperature = value as number;
     this.useColorTemp = true;
+    this.persistState();
     // Only push to LEDs if the light is actually on — adaptive lighting fires
     // on startup before On/Brightness state is populated, which would black out LEDs.
     if (this.states.On) {
@@ -258,18 +231,15 @@ export class OpenRgbPlatformAccessory {
 
       const offModeId = findDeviceModeId(device, 'Off');
       const directModeId = findDeviceModeId(device, 'Direct');
-      const { lastPoweredModeId, lastPoweredRgbColor } = this.accessory.context;
+      const { lastPoweredModeId } = this.accessory.context;
 
       if (togglingPower === true) {
         if (isOn === true) {
-          // Turning on
+          // Turning on: restore last mode; color comes from persisted this.states
           if (lastPoweredModeId !== undefined) {
             newMode = lastPoweredModeId;
           } else if (directModeId !== undefined) {
             newMode = directModeId;
-          }
-          if (lastPoweredRgbColor !== undefined) {
-            newColorRgb = lastPoweredRgbColor;
           }
         } else {
           // Turning off
@@ -313,9 +283,6 @@ export class OpenRgbPlatformAccessory {
           }
         }
         await client.updateLeds(device.deviceId, newLedColors);
-        if (!isLedOff(newColorRgb)) {
-          this.accessory.context.lastPoweredRgbColor = newColorRgb;
-        }
       } catch (err) {
         this.platform.log.warn(`Failed to set light color on device: ${device.name} — ${err instanceof Error ? err.message : err}`);
       }

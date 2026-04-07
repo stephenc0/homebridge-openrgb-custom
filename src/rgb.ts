@@ -62,6 +62,9 @@ export interface RgbDeviceContext {
     ledTints: Color[];
     /** Per-LED saturation scale (0–100); index matches LED index. All LEDs present. */
     ledSaturations: number[];
-    lastPoweredRgbColor?: Color;
+    /** Persisted HomeKit characteristic state, restored on restart. */
+    states?: RgbDeviceStates;
+    /** Whether the last write used color temperature mode rather than HSV. */
+    useColorTemp?: boolean;
     lastPoweredModeId?: number;
 }

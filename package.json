@@ -1,7 +1,7 @@
 {
   "displayName": "Homebridge OpenRGB Advanced",
   "name": "homebridge-openrgb-advanced",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "license": "Apache-2.0",
   "author": "stephenc0",
   "homepage": "https://github.com/stephenc0/homebridge-openrgb-advanced#readme",
